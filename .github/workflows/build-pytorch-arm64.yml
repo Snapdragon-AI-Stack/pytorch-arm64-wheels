@@ -16,6 +16,9 @@ jobs:
         python: ["3.11", "3.12", "3.13"]
 
     steps:
+      - name: Enable long paths in Git
+        run: git config --system core.longpaths true
+
       - name: Checkout PyTorch
         uses: actions/checkout@v4
         with:
