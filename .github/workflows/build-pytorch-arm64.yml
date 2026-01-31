@@ -34,7 +34,9 @@ jobs:
       - name: Install Build Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install numpy pyyaml setuptools wheel typing-extensions
+          # Explicitly install 'wheel' and 'setuptools' first to ensure bdist_wheel is available
+          pip install wheel setuptools --upgrade
+          pip install numpy pyyaml typing-extensions
 
       - name: Configure MSVC for ARM64
         uses: ilammy/msvc-dev-cmd@v1
@@ -58,7 +60,8 @@ jobs:
         run: |
           set CMAKE_GENERATOR=Visual Studio 17 2022
           set CMAKE_GENERATOR_PLATFORM=ARM64
-          python setup.py bdist_wheel
+          # Use 'pip wheel' for a more robust build process than calling setup.py directly
+          python -m pip wheel . --wheel-dir dist/ --no-deps
 
       - name: Upload Wheel Artifact
         uses: actions/upload-artifact@v4
