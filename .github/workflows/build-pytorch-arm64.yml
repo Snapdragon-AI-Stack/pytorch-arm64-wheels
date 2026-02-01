@@ -92,8 +92,8 @@ jobs:
           ATEN_THREADING: NATIVE # Use standard C++ threads instead
           
           # --- ARM64 OPTIMIZATIONS ---
-          USE_QNNPACK: 1        # Use native ARM path
-          USE_PYTORCH_QNNPACK: 1
+          USE_QNNPACK: 0        # Use native ARM path
+          USE_PYTORCH_QNNPACK: 0
           BLAS: Eigen           # The most stable math backend for ARM64 MSVC
           
           # --- COMPILER STABILITY ---
