@@ -1,7 +1,7 @@
 name: Build PyTorch Windows ARM64 Wheels
 
 on:
-  workflow_dispatch: # Allows manual trigger
+  workflow_dispatch:
     inputs:
       publish_release:
         description: 'Publish Release?'
@@ -10,12 +10,12 @@ on:
         default: false
   push:
     tags:
-      - 'v*' # Trigger on version tags (e.g., v2.5.1)
+      - 'v*'
 
 jobs:
   build_wheels:
     name: Build for Python ${{ matrix.python }}
-    runs-on: windows-11-arm # Native Windows ARM64 runner
+    runs-on: windows-11-arm
     strategy:
       fail-fast: false
       matrix:
@@ -41,7 +41,6 @@ jobs:
       - name: Install Build Dependencies
         run: |
           python -m pip install --upgrade pip
-          # Explicitly install 'wheel' and 'setuptools' first to ensure bdist_wheel is available
           pip install wheel setuptools --upgrade
           pip install numpy pyyaml typing-extensions
 
@@ -50,7 +49,6 @@ jobs:
         run: |
           Invoke-WebRequest -Uri "https://github.com/mozilla/sccache/releases/download/v0.13.0/sccache-v0.13.0-aarch64-pc-windows-msvc.tar.gz" -OutFile "sccache.tar.gz"
           tar -xzf sccache.tar.gz
-          # Add to PATH
           echo "$PWD/sccache-v0.13.0-aarch64-pc-windows-msvc" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Sccache Cache
@@ -78,22 +76,36 @@ jobs:
       - name: Build PyTorch Wheel
         shell: cmd
         env:
-          # Critical ARM64 Build Flags
+          # --- CRITICAL STABILITY FLAGS ---
           USE_CUDA: 0
           USE_CUDNN: 0
-          USE_MKLDNN: 0
+          USE_MKLDNN: 0         # Disables Intel-optimized math (Primary crash cause)
+          USE_DISTRIBUTED: 0    # Disables networking (Avoids x64 linking issues)
+          USE_TENSORPIPE: 0     # Incompatible with Windows
+          USE_FBGEMM: 0         # Fails on Windows ARM64
           USE_NNPACK: 0
-          USE_QNNPACK: 1
+          USE_KLEIDIAI: 0       # Not currently supported on Windows ARM64
+          
+          # --- ARM64 OPTIMIZATIONS ---
+          USE_QNNPACK: 1        # Enables the ARM-native optimization path
           USE_PYTORCH_QNNPACK: 1
-          USE_DISTRIBUTED: 0
+          BLAS: Eigen           # Safest portable math backend for initial stability
+          
+          # --- MISC BARE-METAL FLAGS ---
           BUILD_TEST: 0
-          # Use Arm Performance Libraries if installed, otherwise defaults to Eigen
-          BLAS: Eigen
+          USE_SYSTEM_MSVC_RUNTIME: 1 
         run: |
           set CMAKE_GENERATOR=Visual Studio 17 2022
           set CMAKE_GENERATOR_PLATFORM=ARM64
-          # Use 'pip wheel' for a more robust build process than calling setup.py directly
           python -m pip wheel . --wheel-dir dist/ --no-deps
+
+      - name: Smoke Test Wheel
+        shell: cmd
+        run: |
+          FOR %%i IN (dist\*.whl) DO (
+            python -m pip install "%%i"
+            python -c "import torch; print(f'Verification Successful: Torch version {torch.__version__} is active on ARM64')"
+          )
 
       - name: Upload Wheel Artifact
         uses: actions/upload-artifact@v4
@@ -119,7 +131,8 @@ jobs:
           name: PyTorch Windows ARM64 Release ${{ github.ref_name }}
           body: |
             Native PyTorch wheels for Windows 11 ARM64 (Snapdragon X Elite/Plus).
-            Compiled with:
-            - MSVC 2022
-            - No CUDA
-            - QNNPACK Enabled
+            
+            ### 🛠 Build Configuration
+            - **Backend:** Eigen + QNNPACK
+            - **Compiler:** MSVC 2022 (Native ARM64)
+            - **Stability:** MKLDNN and Distributed disabled for ARM64 compatibility.
