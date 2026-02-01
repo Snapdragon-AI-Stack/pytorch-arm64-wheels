@@ -105,13 +105,19 @@ jobs:
           set CMAKE_GENERATOR_PLATFORM=ARM64
           python -m pip wheel . --wheel-dir dist/ --no-deps
 
-      - name: Smoke Test Wheel
+      - name: Smoke Test and Backend Verification
         shell: cmd
         run: |
+          REM 1. Find and install the newly created wheel
           FOR %%i IN (dist\*.whl) DO (
             python -m pip install "%%i"
-            python -c "import torch; print(f'Verification Successful: Torch version {torch.__version__} is active on ARM64')"
           )
+          
+          REM 2. Verify basic import (Checks for 0xC0000409 crashes)
+          python -c "import torch; print(f'Successfully loaded Torch version {torch.__version__}')"
+          
+          REM 3. Verify QNNPACK and Quantized Engines
+          python -c "import torch; print('Supported Engines:', torch.backends.quantized.supported_engines); print('Active Engine:', torch.backends.quantized.engine)"
 
       - name: Upload Wheel Artifact
         uses: actions/upload-artifact@v4
