@@ -76,24 +76,30 @@ jobs:
       - name: Build PyTorch Wheel
         shell: cmd
         env:
-          # --- CRITICAL STABILITY FLAGS ---
+          # --- PREVENT ALL X64/INTEL LEAKAGE ---
           USE_CUDA: 0
           USE_CUDNN: 0
-          USE_MKLDNN: 0         # Disables Intel-optimized math (Primary crash cause)
-          USE_DISTRIBUTED: 0    # Disables networking (Avoids x64 linking issues)
-          USE_TENSORPIPE: 0     # Incompatible with Windows
+          USE_MKLDNN: 0         # Disable Intel-specific math DNN
+          USE_MKLDNN_CBLAS: 0
           USE_FBGEMM: 0         # Fails on Windows ARM64
           USE_NNPACK: 0
-          USE_KLEIDIAI: 0       # Not currently supported on Windows ARM64
+          
+          # --- DISABLE UNSTABLE ARM64 BACKENDS ---
+          USE_DISTRIBUTED: 0    # Gloo/Networking causes crashes on ARM64
+          USE_TENSORPIPE: 0
+          USE_GLOO: 0           # Explicitly kill Gloo
+          USE_OPENMP: 0         # Disable OpenMP (Major cause of stack overruns)
+          ATEN_THREADING: NATIVE # Use standard C++ threads instead
           
           # --- ARM64 OPTIMIZATIONS ---
-          USE_QNNPACK: 1        # Enables the ARM-native optimization path
+          USE_QNNPACK: 1        # Use native ARM path
           USE_PYTORCH_QNNPACK: 1
-          BLAS: Eigen           # Safest portable math backend for initial stability
+          BLAS: Eigen           # The most stable math backend for ARM64 MSVC
           
-          # --- MISC BARE-METAL FLAGS ---
-          BUILD_TEST: 0
+          # --- COMPILER STABILITY ---
           USE_SYSTEM_MSVC_RUNTIME: 1 
+          BUILD_TEST: 0
+          USE_KLEIDIAI: 0
         run: |
           set CMAKE_GENERATOR=Visual Studio 17 2022
           set CMAKE_GENERATOR_PLATFORM=ARM64
