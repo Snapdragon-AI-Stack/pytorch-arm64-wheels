@@ -48,10 +48,10 @@ jobs:
       - name: Install sccache
         shell: powershell
         run: |
-          Invoke-WebRequest -Uri "https://github.com/mozilla/sccache/releases/download/v0.8.1/sccache-v0.8.1-aarch64-pc-windows-msvc.tar.gz" -OutFile "sccache.tar.gz"
+          Invoke-WebRequest -Uri "https://github.com/mozilla/sccache/releases/download/v0.13.0/sccache-v0.13.0-aarch64-pc-windows-msvc.tar.gz" -OutFile "sccache.tar.gz"
           tar -xzf sccache.tar.gz
           # Add to PATH
-          echo "$PWD/sccache-v0.8.1-aarch64-pc-windows-msvc" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          echo "$PWD/sccache-v0.13.0-aarch64-pc-windows-msvc" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Sccache Cache
         uses: actions/cache@v4
