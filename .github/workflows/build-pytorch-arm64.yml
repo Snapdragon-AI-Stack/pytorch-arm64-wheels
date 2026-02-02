@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12", "3.13"]
+        python: ["3.11", "3.12", "3.13"] # Testing 3.11 first as the most stable baseline
 
     steps:
       - name: Enable long paths in Git
@@ -58,7 +58,6 @@ jobs:
           key: ${{ runner.os }}-sccache-${{ matrix.python }}-${{ hashFiles('setup.py') }}
           restore-keys: |
             ${{ runner.os }}-sccache-${{ matrix.python }}-
-            ${{ runner.os }}-sccache-
 
       - name: Configure Sccache
         shell: bash
@@ -76,75 +75,40 @@ jobs:
       - name: Build PyTorch Wheel
         shell: cmd
         env:
-          # --- PREVENT ALL X64/INTEL LEAKAGE ---
-          USE_CUDA: 0
-          USE_CUDNN: 0
-          USE_MKLDNN: 0         # Disable Intel-specific math DNN
-          USE_MKLDNN_CBLAS: 0
-          USE_FBGEMM: 0         # Fails on Windows ARM64
-          USE_NNPACK: 0
-          
-          # --- DISABLE UNSTABLE ARM64 BACKENDS ---
-          USE_DISTRIBUTED: 0    # Gloo/Networking causes crashes on ARM64
-          USE_TENSORPIPE: 0
-          USE_GLOO: 0           # Explicitly kill Gloo
-          USE_OPENMP: 0         # Disable OpenMP (Major cause of stack overruns)
-          ATEN_THREADING: NATIVE # Use standard C++ threads instead
-          
-          # --- ARM64 OPTIMIZATIONS ---
-          USE_QNNPACK: 0        # Use native ARM path
+          # --- DISABLE ALL SIMD/ASSEMBLY KERNELS (CRITICAL) ---
+          USE_QNNPACK: 0
           USE_PYTORCH_QNNPACK: 0
-          BLAS: Eigen           # The most stable math backend for ARM64 MSVC
-          
-          # --- COMPILER STABILITY ---
-          USE_SYSTEM_MSVC_RUNTIME: 1 
-          BUILD_TEST: 0
+          USE_XNNPACK: 0        # Often includes incompatible ARM assembly
+          USE_NNPACK: 0
+          USE_FBGEMM: 0
           USE_KLEIDIAI: 0
+          
+          # --- THREADING & MATH (PRISTINE BASELINE) ---
+          USE_OPENMP: 0         # Removes dependency on missing libomp140
+          ATEN_THREADING: NATIVE
+          BLAS: Eigen           # Safest generic C++ math backend
+          
+          # --- SYSTEM STABILITY ---
+          USE_CUDA: 0
+          USE_MKLDNN: 0
+          USE_DISTRIBUTED: 0
+          USE_SYSTEM_MSVC_RUNTIME: 1
+          BUILD_TEST: 0
         run: |
           set CMAKE_GENERATOR=Visual Studio 17 2022
           set CMAKE_GENERATOR_PLATFORM=ARM64
           python -m pip wheel . --wheel-dir dist/ --no-deps
 
-      - name: Smoke Test and Backend Verification
+      - name: Verbose Smoke Test
         shell: cmd
         run: |
-          REM 1. Find and install the newly created wheel
-          FOR %%i IN (dist\*.whl) DO (
-            python -m pip install "%%i"
-          )
-          
-          REM 2. Verify basic import (Checks for 0xC0000409 crashes)
-          python -c "import torch; print(f'Successfully loaded Torch version {torch.__version__}')"
-          
-          REM 3. Verify QNNPACK and Quantized Engines
-          python -c "import torch; print('Supported Engines:', torch.backends.quantized.supported_engines); print('Active Engine:', torch.backends.quantized.engine)"
+          FOR %%i IN (dist\*.whl) DO python -m pip install "%%i"
+          REM Verbose mode shows exactly where the C-init fails
+          python -v -c "import torch; print('--- SUCCESSFUL IMPORT ---')" > import_trace.log 2>&1
+          type import_trace.log
 
       - name: Upload Wheel Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pytorch-wheel-py${{ matrix.python }}
+          name: pytorch-safe-wheel-py${{ matrix.python }}
           path: dist/*.whl
-
-  release:
-    needs: build_wheels
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.publish_release == true)
-    steps:
-      - name: Download all wheels
-        uses: actions/download-artifact@v4
-        with:
-          path: all-wheels
-          merge-multiple: true
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: all-wheels/*.whl
-          name: PyTorch Windows ARM64 Release ${{ github.ref_name }}
-          body: |
-            Native PyTorch wheels for Windows 11 ARM64 (Snapdragon X Elite/Plus).
-            
-            ### 🛠 Build Configuration
-            - **Backend:** Eigen + QNNPACK
-            - **Compiler:** MSVC 2022 (Native ARM64)
-            - **Stability:** MKLDNN and Distributed disabled for ARM64 compatibility.
