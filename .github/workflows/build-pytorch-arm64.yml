@@ -75,23 +75,25 @@ jobs:
       - name: Build PyTorch Wheel
         shell: cmd
         env:
-          # --- DISABLE ALL SIMD/ASSEMBLY KERNELS (CRITICAL) ---
+          # --- PREVENT ALL EXTERNAL RUNTIME CONFLICTS ---
+          USE_OPENMP: 0
+          ATEN_THREADING: NATIVE
+          BLAS: Eigen
           USE_QNNPACK: 0
           USE_PYTORCH_QNNPACK: 0
-          USE_XNNPACK: 0        # Often includes incompatible ARM assembly
-          USE_NNPACK: 0
-          USE_FBGEMM: 0
-          USE_KLEIDIAI: 0
-          
-          # --- THREADING & MATH (PRISTINE BASELINE) ---
-          USE_OPENMP: 0         # Removes dependency on missing libomp140
-          ATEN_THREADING: NATIVE
-          BLAS: Eigen           # Safest generic C++ math backend
-          
-          # --- SYSTEM STABILITY ---
-          USE_CUDA: 0
+          USE_XNNPACK: 0
+        
+          # --- STRIP POTENTIAL ALIGNMENT FAULTS ---
           USE_MKLDNN: 0
           USE_DISTRIBUTED: 0
+          USE_FBGEMM: 0
+        
+          # --- THE FIX: STATIC CRT & NO SECURITY CHECK FAILURES ---
+          # This bundles the C runtime to avoid ucrtbase.dll conflicts
+          CAFFE2_USE_MSVC_STATIC_CRT: ON
+          # Disable potentially problematic security instrumentation for this ARM build
+          USE_CONTROL_FLOW_GUARD: OFF
+        
           USE_SYSTEM_MSVC_RUNTIME: 1
           BUILD_TEST: 0
         run: |
